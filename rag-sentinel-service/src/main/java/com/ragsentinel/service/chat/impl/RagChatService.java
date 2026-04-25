@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 
 import static com.ragsentinel.constants.AICustomMetrics.TOKENS_USAGE;
 import static com.ragsentinel.constants.AICustomMetrics.VECTOR_SEARCH_LATENCY;
+import static com.ragsentinel.constants.AIModelConstants.MODEL;
+import static com.ragsentinel.constants.AIModelConstants.PHI3;
 
 /**
  * This is a simple RAG Chat Service which fetches data from vector DB and calls LLM and returns response
@@ -73,7 +75,7 @@ public class RagChatService implements ChatService {
     private void recordUsageMetrics(ChatResponse response) {
         if (response != null && response.getMetadata().getUsage() != null) {
             long totalTokens = response.getMetadata().getUsage().getTotalTokens();
-            meterRegistry.counter(TOKENS_USAGE, "model", "gpt-4o").increment(totalTokens);
+            meterRegistry.counter(TOKENS_USAGE, MODEL, PHI3).increment(totalTokens);
         }
     }
 }
