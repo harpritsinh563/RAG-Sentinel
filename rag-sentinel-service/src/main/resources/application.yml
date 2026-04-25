@@ -1,11 +1,22 @@
 spring:
   application:
     name: rag-observer-sentinel
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vectordb
+    username: postgres
+    password: password
   ai:
     ollama:
       base-url: http://localhost:11434
       chat:
         model: phi3
+      embedding:
+        model: nomic-embed-text
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 768 # nomic-embed-text dimension size
 
 management:
   otlp:
