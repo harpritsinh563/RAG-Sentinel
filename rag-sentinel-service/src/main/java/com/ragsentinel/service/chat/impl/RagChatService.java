@@ -1,5 +1,6 @@
 package com.ragsentinel.service.chat.impl;
 
+import com.ragsentinel.llmtelemetry.LLMTelemetryExtractor;
 import com.ragsentinel.service.chat.ChatService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -26,6 +27,7 @@ public class RagChatService implements ChatService {
     private final ChatClient chatClient;
     private final VectorStore vectorStore;
     private final MeterRegistry meterRegistry;
+    private final List<LLMTelemetryExtractor> telemetryExtractors;
 
     // We use an AtomicReference so the Gauge can read the latest score dynamically
     private final AtomicReference<Double> latestSimilarityScore = new AtomicReference<>(0.0);
@@ -35,10 +37,11 @@ public class RagChatService implements ChatService {
 
     public RagChatService(ChatClient.Builder chatClientBuilder,
                           VectorStore vectorStore,
-                          MeterRegistry meterRegistry) {
+                          MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
         this.meterRegistry = meterRegistry;
+        this.telemetryExtractors = llmTelemetryExtractors;
 
         // Register the Gauge once during initialization
         Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get)

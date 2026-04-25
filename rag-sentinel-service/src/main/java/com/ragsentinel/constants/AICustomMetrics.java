@@ -7,4 +7,7 @@ public class AICustomMetrics {
     public static final String TOKENS_USAGE = "llm.token.consumption.total";
     public static final String VECTOR_TOP_SCORE = "rag.vector.top_score";
     public static final String OUTPUT_GUARDRAIL_TRIPPED = "rag.guardrail.output.tripped";
+    public static final String CONTEXT_PROCESSING_TIME = "llm.duration.prompt_eval";
+    public static final String TOKEN_GENERATION_TIME = "llm.duration.generation";
+    public static final String MODEL_LOAD_TIME = "llm.duration.load";
 }
