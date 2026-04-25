@@ -1,25 +1,27 @@
 version: '3.8'
 
 services:
-  # The OpenTelemetry Collector
+  # The OpenTelemetry Collector (Middleman)
   otel-collector:
-    image: otel/opentelemetry-collector:latest
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml
     ports:
-      - "4317:4317"   # OTLP gRPC Receiver
-      - "4318:4318"   # OTLP HTTP Receiver
+      - "4317:4317"   # OTLP gRPC receiver (Spring app hits this)
+      - "8889:8889"   # Prometheus exporter port
+      - "4318:4318"
     depends_on:
       - jaeger
-      - prometheus
 
   # Tracing: Jaeger
   jaeger:
     image: jaegertracing/all-in-one:latest
+    container_name: jaeger
     ports:
       - "16686:16686" # Jaeger UI
-      - "14250:14250" # gRPC ingest
+      - "14250:14250" # gRPC ingest from OTel
 
   # Metrics: Prometheus
   prometheus:
@@ -28,22 +30,25 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-remote-write-receiver
     ports:
-      - "9090:9090"   # Prometheus UI
+      - "9090:9090"
 
   # Dashboards: Grafana
   grafana:
     image: grafana/grafana:latest
+    container_name: grafana
     ports:
-      - "3000:3000"   # Grafana UI
+      - "3000:3000"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-  
+
+  # Vector Database
   pgvector:
     image: pgvector/pgvector:pg16
+    container_name: pgvector
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=vectordb
     ports:
-      - "5432:5432"
+      - "5433:5432"

@@ -2,30 +2,42 @@ spring:
   application:
     name: rag-observer-sentinel
   datasource:
-    url: jdbc:postgresql://localhost:5432/vectordb
+    url: jdbc:postgresql://127.0.0.1:5433/vectordb
     username: postgres
     password: password
   ai:
     ollama:
-      base-url: http://localhost:11434
+      base-url: http://127.0.0.1:11434
       chat:
-        model: phi3
+        options:
+          model: phi3
       embedding:
-        model: nomic-embed-text
+        options:
+          model: nomic-embed-text
     vectorstore:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 768 # nomic-embed-text dimension size
+        dimensions: 768
+        initialize-schema: true
 
 management:
   otlp:
     tracing:
-      endpoint: http://localhost:4317
+      endpoint: http://127.0.0.1:4318/v1/traces
+      transport: http
+    metrics:
+      export:
+        url: http://127.0.0.1:4318/v1/metrics
+        step: 10s
   tracing:
     sampling:
       probability: 1.0
   endpoints:
     web:
       exposure:
-        include: prometheus
+        include: prometheus, health, info
+  metrics:
+    distribution:
+      percentiles-histogram:
+        all: true # Useful for latency heatmaps in Grafana

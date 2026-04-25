@@ -3,10 +3,12 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
 
 exporters:
   prometheus:
-    endpoint: "prometheus:9090"
+    endpoint: "0.0.0.0:8889"  # Prometheus will pull from here
     metric_expiration: 10m
     
   otlp/jaeger:
@@ -14,7 +16,7 @@ exporters:
     tls:
       insecure: true
 
-  logging:
+  debug:
     verbosity: detailed
 
 processors:
@@ -25,8 +27,8 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger, logging]
+      exporters: [otlp/jaeger, debug]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [prometheus, logging]
+      exporters: [prometheus, debug]
