@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: rag-observer-sentinel
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://localhost:4317
+  tracing:
+    sampling:
+      probability: 1.0
+  endpoints:
+    web:
+      exposure:
+        include: prometheus
