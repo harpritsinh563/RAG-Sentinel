@@ -19,7 +19,7 @@ public class ChatController {
     }
 
     @PostMapping
-    public ResponseEntity<String> generateResponse(@RequestParam String prompt) {
+    public ResponseEntity<String> generateResponse(@RequestParam(name = "prompt") String prompt) {
         return ResponseEntity.ok(chatService.chatWithContext(prompt));
     }
 }
