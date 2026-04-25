@@ -13,7 +13,7 @@
         <maven.compiler.target>19</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot-version>3.3.5</spring-boot-version>
-        <spring-ai-openai.version>1.0.0-M5</spring-ai-openai.version>
+        <spring-ai-ollama.version>1.0.0-M5</spring-ai-ollama.version>
     </properties>
 
     <dependencyManagement>
@@ -40,10 +40,9 @@
 
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
-            <version>${spring-ai-openai.version}</version>
+            <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
+            <version>${spring-ai-ollama.version}</version>
         </dependency>
-
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
