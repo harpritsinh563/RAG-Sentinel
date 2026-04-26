@@ -15,4 +15,5 @@ public class AICustomMetrics {
     public static final String ANSWER_RELEVANCE = "rag.eval.answer_relevance";
     public static final String CONTEXT_RELEVANCE = "rag.eval.context_relevance";
     public static final String CHUNK_RETRIEVAL_COUNT = "rag.chunk.retrieval.count";
+    public static final String GUARDRAIL_VIOLATION = "rag.guardrail.violation";
 }

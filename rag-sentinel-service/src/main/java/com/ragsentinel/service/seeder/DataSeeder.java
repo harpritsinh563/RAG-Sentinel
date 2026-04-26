@@ -43,6 +43,6 @@ public class DataSeeder implements CommandLineRunner {
                         /* ... imagine 500 more words here ... */
                         "SREs must manually execute the promotion script. Data loss was near-zero.", Map.of("id", "doc_incident_long", "type", "long_context"))));
 
-        log.info("Vector DB Seeded with Company Policies!");
+        log.info("Vector DB Seeded");
     }
 }
