@@ -11,4 +11,5 @@ public class AICustomMetrics {
     public static final String TOKEN_GENERATION_TIME = "llm.duration.generation";
     public static final String MODEL_LOAD_TIME = "llm.duration.load";
     public static final String WASTAGE_RATIO = "rag.context.wastage_ratio";
+    public static final String FAITHFULNESS = "rag.eval.faithfulness";
 }

@@ -19,6 +19,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.ragsentinel.constants.AICustomMetrics.*;
 import static com.ragsentinel.constants.AIModelConstants.MODEL;
 import static com.ragsentinel.constants.AIModelConstants.PHI3;
+import static com.ragsentinel.constants.MetricTags.CONTEXT_MISS;
+import static com.ragsentinel.constants.MetricTags.REASON;
 
 /**
  * This is a simple RAG Chat Service which fetches data from vector DB and calls LLM and returns response
@@ -130,7 +132,7 @@ public class RagChatService implements ChatService {
                 .anyMatch(lowerOutput::contains);
 
         if (isContextMiss) {
-            meterRegistry.counter(OUTPUT_GUARDRAIL_TRIPPED, "reason", "context_miss").increment();
+            meterRegistry.counter(OUTPUT_GUARDRAIL_TRIPPED, REASON, CONTEXT_MISS).increment();
         }
     }
 
