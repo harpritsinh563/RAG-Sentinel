@@ -49,6 +49,9 @@ services:
     volumes:
       - ./grafana/provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
   # Vector Database
   pgvector:
     image: pgvector/pgvector:pg16
