@@ -1,12 +1,14 @@
 package com.ragsentinel.service.chat.impl;
 
 import com.ragsentinel.llmtelemetry.LLMTelemetryExtractor;
+import com.ragsentinel.service.RAGTriadEvaluator;
 import com.ragsentinel.service.chat.ChatService;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Gauge;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -31,6 +33,7 @@ public class RagChatService implements ChatService {
     private final VectorStore vectorStore;
     private final MeterRegistry meterRegistry;
     private final List<LLMTelemetryExtractor> telemetryExtractors;
+    private final RAGTriadEvaluator ragTriadEvaluator;
 
     // We use an AtomicReference so the Gauge can read the latest score dynamically
     private final AtomicReference<Double> latestSimilarityScore = new AtomicReference<>(0.0);
@@ -40,11 +43,14 @@ public class RagChatService implements ChatService {
 
     public RagChatService(ChatClient.Builder chatClientBuilder,
                           VectorStore vectorStore,
-                          MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors) {
+                          MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors,
+                          RAGTriadEvaluator ragTriadEvaluator
+                          ) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
         this.meterRegistry = meterRegistry;
         this.telemetryExtractors = llmTelemetryExtractors;
+        this.ragTriadEvaluator = ragTriadEvaluator;
 
         // Register the Gauge once during initialization
         Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get)
@@ -69,6 +75,9 @@ public class RagChatService implements ChatService {
         // Track Usage & Output Guardrails
         recordUsageMetrics(response);
         checkOutputGuardrails(finalOutput);
+
+        // Async evaluation of answer,context relevance and faithfullness
+        ragTriadEvaluator.evaluateTriadAsync(prompt,context,finalOutput);
 
         return finalOutput;
     }
@@ -119,6 +128,13 @@ public class RagChatService implements ChatService {
             long totalTokens = response.getMetadata().getUsage().getTotalTokens();
             meterRegistry.counter(TOKENS_USAGE, MODEL, PHI3).increment(totalTokens);
         }
+
+        ChatResponseMetadata metadata = response.getMetadata();
+
+        telemetryExtractors.stream()
+                .filter(extractor -> extractor.supports(metadata))
+                .findFirst()
+                .ifPresent(extractor -> extractor.extractAndRecord(metadata));
     }
 
     private void checkOutputGuardrails(String output) {
