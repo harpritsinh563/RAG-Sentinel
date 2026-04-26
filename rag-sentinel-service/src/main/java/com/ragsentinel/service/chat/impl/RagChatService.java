@@ -21,8 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.ragsentinel.constants.AICustomMetrics.*;
 import static com.ragsentinel.constants.AIModelConstants.MODEL;
 import static com.ragsentinel.constants.AIModelConstants.PHI3;
-import static com.ragsentinel.constants.MetricTags.CONTEXT_MISS;
-import static com.ragsentinel.constants.MetricTags.REASON;
+import static com.ragsentinel.constants.MetricTags.*;
 
 /**
  * This is a simple RAG Chat Service which fetches data from vector DB and calls LLM and returns response
@@ -67,6 +66,7 @@ public class RagChatService implements ChatService {
 
         // Track Context Wastage / Bloat Ratio
         trackWastageRatio(prompt,context);
+        trackChunkHitRate(documents);
 
         // Generate Response & Track LLM Latency
         ChatResponse response = callLlmWithMetrics(prompt, context);
@@ -163,5 +163,13 @@ public class RagChatService implements ChatService {
                 .description("Ratio of retrieved context size to original prompt size")
                 .register(meterRegistry)
                 .record(ratio);
+    }
+
+    private void trackChunkHitRate(List<Document> documents) {
+        for (Document doc : documents) {
+            String chunkSource = (String) doc.getMetadata().getOrDefault("source", doc.getId());
+
+            meterRegistry.counter(CHUNK_RETRIEVAL_COUNT, CHUNK_ID, chunkSource).increment();
+        }
     }
 }
