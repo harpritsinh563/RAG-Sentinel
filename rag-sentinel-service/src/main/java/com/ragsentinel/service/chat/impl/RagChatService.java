@@ -2,6 +2,7 @@ package com.ragsentinel.service.chat.impl;
 
 import com.ragsentinel.llmtelemetry.LLMTelemetryExtractor;
 import com.ragsentinel.service.chat.ChatService;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Gauge;
@@ -55,6 +56,9 @@ public class RagChatService implements ChatService {
         List<Document> documents = performSimilaritySearch(prompt);
         updateTopScoreMetric(documents);
         String context = formatDocuments(documents);
+
+        // Track Context Wastage / Bloat Ratio
+        trackWastageRatio(prompt,context);
 
         // Generate Response & Track LLM Latency
         ChatResponse response = callLlmWithMetrics(prompt, context);
@@ -128,5 +132,18 @@ public class RagChatService implements ChatService {
         if (isContextMiss) {
             meterRegistry.counter(OUTPUT_GUARDRAIL_TRIPPED, "reason", "context_miss").increment();
         }
+    }
+
+    private void trackWastageRatio(String prompt, String context) {
+        if (context == null || context.isEmpty()) return;
+
+        // Simple character length ratio as a proxy for token bloat
+        double ratio = (double) context.length() / prompt.length();
+
+        // DistributionSummary is perfect for tracking ratios/sizes over time
+        DistributionSummary.builder(WASTAGE_RATIO)
+                .description("Ratio of retrieved context size to original prompt size")
+                .register(meterRegistry)
+                .record(ratio);
     }
 }
