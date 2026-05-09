@@ -1,222 +1,161 @@
 {
-  "apiVersion": "dashboard.grafana.app/v2",
-  "kind": "Dashboard",
-  "metadata": {
-    "name": "gq5mb7",
-    "namespace": "default",
-    "uid": "2321065e-b356-4883-b4c3-a5b57398bdb0",
-    "resourceVersion": "1777204906625010",
-    "generation": 3,
-    "creationTimestamp": "2026-04-26T11:34:44Z",
-    "labels": {
-      "grafana.app/deprecatedInternalID": "3730924350939136"
+  "editable": true,
+  "panels": [
+    {
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "🛡️ Security & Reliability Sentinel",
+      "type": "row"
     },
-    "annotations": {
-      "grafana.app/createdBy": "anonymous:0",
-      "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana v13.0.1 (a100054f)",
-      "grafana.app/updatedBy": "anonymous:0",
-      "grafana.app/updatedTimestamp": "2026-04-26T12:01:46Z"
-    }
-  },
-  "spec": {
-    "annotations": [
-      {
-        "kind": "AnnotationQuery",
-        "spec": {
-          "query": {
-            "kind": "DataQuery",
-            "group": "grafana",
-            "version": "v0",
-            "datasource": {
-              "name": "-- Grafana --"
-            },
-            "spec": {}
-          },
-          "enable": true,
-          "hide": true,
-          "iconColor": "rgba(0, 211, 255, 1)",
-          "name": "Annotations & Alerts",
-          "builtIn": true
-        }
-      }
-    ],
-    "cursorSync": "Off",
-    "editable": true,
-    "elements": {
-      "panel-1": {
-        "kind": "Panel",
-        "spec": {
-          "id": 1,
-          "title": "GuardRail Violation",
-          "description": "",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "prometheus",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "ffk90mmwa2ubkd"
-                      },
-                      "spec": {
-                        "editorMode": "code",
-                        "expr": "sum(increase(rag_guardrail_violation_total[15m]))",
-                        "instant": true,
-                        "legendFormat": "__auto",
-                        "range": true
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "13.0.1",
-            "spec": {
-              "options": {
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": 0,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
-                },
-                "overrides": []
-              }
-            }
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
           }
         }
-      }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Prompt Injections Blocked",
+      "targets": [ { "expr": "round(sum(increase(rag_guardrail_violation_total[15m])))", "refId": "A" } ],
+      "type": "stat"
     },
-    "layout": {
-      "kind": "GridLayout",
-      "spec": {
-        "items": [
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-1"
-              }
-            }
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
           }
-        ]
-      }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Hallucinations Caught",
+      "targets": [ { "expr": "sum(increase(rag_guardrail_output_tripped_total[15m]))", "refId": "A" } ],
+      "type": "stat"
     },
-    "links": [],
-    "liveNow": false,
-    "preload": false,
-    "tags": [],
-    "timeSettings": {
-      "timezone": "browser",
-      "from": "now-1h",
-      "to": "now",
-      "autoRefresh": "",
-      "autoRefreshIntervals": [
-        "5s",
-        "10s",
-        "30s",
-        "1m",
-        "5m",
-        "15m",
-        "30m",
-        "1h",
-        "2h",
-        "1d"
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.3 },
+              { "color": "red", "value": 0.6 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Vector Similarity Score (Top)",
+      "targets": [ { "expr": "rag_vector_top_score", "refId": "A" } ],
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "none" }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Context Wastage Ratio",
+      "targets": [ { "expr": "rate(rag_context_wastage_ratio_sum[1m]) / rate(rag_context_wastage_ratio_count[1m])", "refId": "A" } ],
+      "type": "stat"
+    },
+    {
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "⚡ Performance & Latency Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "RAG Latency Stack (Seconds)",
+      "targets": [
+        { "expr": "rate(rag_vector_search_latency_seconds_sum[1m]) / rate(rag_vector_search_latency_seconds_count[1m])", "legendFormat": "Vector Search", "refId": "A" },
+        { "expr": "rate(llm_generation_latency_seconds_sum[1m]) / rate(llm_generation_latency_seconds_count[1m])", "legendFormat": "LLM Total Gen", "refId": "B" }
       ],
-      "hideTimepicker": false,
-      "fiscalYearStartMonth": 0
+      "type": "timeseries"
     },
-    "title": "RAG-Sentinel",
-    "variables": [],
-    "preferences": {
-      "layout": {
-        "kind": "GridLayout",
-        "spec": {
-          "items": []
-        }
-      }
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Ollama Internals (Breakdown)",
+      "targets": [
+        { "expr": "rate(llm_duration_prompt_eval_seconds_sum[1m]) / rate(llm_duration_prompt_eval_seconds_count[1m])", "legendFormat": "Context Processing", "refId": "A" },
+        { "expr": "rate(llm_duration_generation_seconds_sum[1m]) / rate(llm_duration_generation_seconds_count[1m])", "legendFormat": "Token Generation", "refId": "B" },
+        { "expr": "rate(llm_duration_load_seconds_sum[1m]) / rate(llm_duration_load_seconds_count[1m])", "legendFormat": "Model Load Time", "refId": "C" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "🧪 RAG Triad & Content Analysis",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 15 },
+      "id": 7,
+      "title": "Faithfulness (Pass vs Fail)",
+      "targets": [ { "expr": "sum(increase(rag_eval_faithfulness_total[1h])) by (status)", "legendFormat": "{{status}}", "refId": "A" } ],
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 15 },
+      "id": 8,
+      "title": "Context Relevance",
+      "targets": [ { "expr": "sum(increase(rag_eval_context_relevance_total[1h])) by (status)", "legendFormat": "{{status}}", "refId": "A" } ],
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 15 },
+      "id": 9,
+      "title": "Answer Relevance",
+      "targets": [ { "expr": "sum(increase(rag_eval_answer_relevance_total[1h])) by (status)", "legendFormat": "{{status}}", "refId": "A" } ],
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 22 },
+      "id": 10,
+      "options": { "orientation": "horizontal" },
+      "title": "Hot Documents (Chunk Hit Rate)",
+      "targets": [ { "expr": "sum(increase(rag_chunk_retrieval_count_total[1h])) by (chunk_id)", "legendFormat": "{{chunk_id}}", "refId": "A" } ],
+      "type": "bargauge"
     }
-  }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "title": "RAG Observer Sentinel - Elite Dashboard",
+  "uid": "rag-sentinel-v2"
 }
