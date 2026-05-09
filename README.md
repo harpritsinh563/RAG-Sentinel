@@ -42,6 +42,12 @@ This application is built entirely on a localized, cost-free open-source stack t
 
 ---
 
+## Architecture & Flow
+![Architecture](/docs/RAG_Observer_Sentinel_Architecture.png)
+
+
+---
+
 ## 🚀 How to Start on Local Machine
 
 Follow these exact steps to spin up the entire infrastructure and application locally.

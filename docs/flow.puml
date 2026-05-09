@@ -1,0 +1,105 @@
+@startuml RAG_Observer_Sentinel_Flow
+!theme plain
+skinparam defaultFontName Arial
+skinparam maxMessageSize 150
+autonumber
+
+' --- Import Standard Library Icons ---
+!include <tupadr3/common>
+!include <tupadr3/devicons/java>
+!include <tupadr3/devicons/postgresql>
+!include <tupadr3/font-awesome-5/brain>
+!include <tupadr3/font-awesome-5/chart_line>
+!include <tupadr3/font-awesome-5/project_diagram>
+!include <tupadr3/font-awesome-5/user_astronaut>
+
+' --- Define Participants with Icons ---
+actor "<$user_astronaut>\nClient\n(Postman/Script)" as Client
+box "Application Tier" #LightBlue
+participant "<$java>\nSpring Boot\n(RAG Service)" as App
+end box
+
+box "Data & AI Tier" #LightYellow
+participant "<$postgresql>\nPgVector\n(Vector DB)" as DB
+participant "<$brain>\nOllama\n(Phi-3 LLM)" as LLM
+end box
+
+box "Observability Tier" #LightGreen
+participant "<$project_diagram>\nOTel Collector" as OTel
+participant "<$chart_line>\nPrometheus" as Prom
+participant "<$chart_line>\nGrafana" as Grafana
+end box
+
+' --- Synchronous RAG Flow ---
+== Synchronous Request Lifecycle ==
+
+Client -> App: POST /api/chat\n{"prompt": "Explain architecture..."}
+activate App
+
+note right of App
+  **Interceptor:** PromptGuard
+  Records metric: ""rag.guardrail.violation""
+end note
+
+App -> DB: Vector Similarity Search (Query)
+activate DB
+DB --> App: Top-K Document Chunks
+deactivate DB
+
+note right of App
+  **Evaluation:** Context Wastage
+  Records metric: ""rag.chunk.retrieval.count""
+  Records metric: ""rag.context.wastage_ratio""
+end note
+
+App -> LLM: Generate Response\n(Prompt + Retrieved Context)
+activate LLM
+LLM --> App: LLM String Output +\nToken/Duration Stats
+deactivate LLM
+
+note right of App
+  **Interceptor:** OutputGuard
+  Records metric: ""rag.guardrail.output.tripped""
+end note
+
+App --> Client: HTTP 200 OK (Response)
+deactivate App
+
+' --- Asynchronous Telemetry Flow ---
+== Asynchronous Observability & Telemetry Flow ==
+
+group Distributed Tracing (Push)
+    App -> OTel: Push Span Data (OOTB Spring OTel)\n[Vector Latency, LLM Latency]
+end
+
+group RAG Triad Evaluation (Async Background)
+    App -> App: triggerAsyncTriad()
+    note right of App
+      Calculates Faithfulness, 
+      Context Relevance, Answer Relevance
+      Updates Micrometer Registries
+    end note
+end
+
+group Metrics Scraping (Pull)
+    loop Every 5 seconds
+        Prom -> App: GET /actuator/prometheus
+        activate App
+        App --> Prom: Scrape Payload (Prometheus Format)
+        deactivate App
+        note right of Prom
+          Ingests latencies, guardrail 
+          trips, triad scores, token usage
+        end note
+    end
+end
+
+group Visualizing the Data
+    Grafana -> Prom: Execute PromQL Queries
+    activate Prom
+    Prom --> Grafana: Time-series Data
+    deactivate Prom
+    Grafana -> Grafana: Render Sentinel Dashboard
+end
+
+@enduml
