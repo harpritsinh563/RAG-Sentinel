@@ -7,6 +7,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static com.ragsentinel.constants.AICustomMetrics.*;
 import static com.ragsentinel.constants.MetricTags.STATUS;
 
@@ -69,21 +72,42 @@ public class RAGTriadEvaluator {
     }
 
     private void recordTriadMetrics(String evalResponse) {
-        if (evalResponse == null) return;
+        log.info("RAW LLM JUDGE OUTPUT: {}", evalResponse);
 
-        // Clean up the response (e.g., " 1, 0, 1 " -> "1,0,1")
-        String cleanResponse = evalResponse.replaceAll("[^0,1]", "").trim();
-        String[] scores = cleanResponse.split(",");
+        // 1. Normalize the text (lowercase, replace commas with spaces)
+        String normalized = evalResponse.toLowerCase().replace(",", " ");
 
-        if (scores.length == 3) {
-            // Metric 1: Faithfulness
-            meterRegistry.counter(FAITHFULNESS, STATUS, "1".equals(scores[0]) ? "pass" : "fail").increment();
+        // 2. Split by any amount of whitespace
+        String[] tokens = normalized.split("\\s+");
 
-            // Metric 2: Context Relevance
-            meterRegistry.counter(CONTEXT_RELEVANCE, STATUS, "1".equals(scores[1]) ? "pass" : "fail").increment();
+        // 3. Robustly extract the binary values
+        List<Integer> parsedScores = new ArrayList<>();
+        for (String token : tokens) {
+            // Strip any lingering punctuation like periods
+            String cleanToken = token.replaceAll("[^a-z0-9]", "");
 
-            // Metric 3: Answer Relevance
-            meterRegistry.counter(ANSWER_RELEVANCE, STATUS, "1".equals(scores[2]) ? "pass" : "fail").increment();
+            if (cleanToken.equals("1") || cleanToken.equals("yes") || cleanToken.equals("true")) {
+                parsedScores.add(1);
+            } else if (cleanToken.equals("0") || cleanToken.equals("no") || cleanToken.equals("false")) {
+                parsedScores.add(0);
+            }
+        }
+
+        // 4. Validate and Record
+        if (parsedScores.size() >= 3) {
+            int faithfulness = parsedScores.get(0);
+            int contextRelevance = parsedScores.get(1);
+            int answerRelevance = parsedScores.get(2);
+
+            log.info("PARSED SCORES -> Faithfulness: {}, Context: {}, Answer: {}",
+                    faithfulness, contextRelevance, answerRelevance);
+
+             meterRegistry.counter(FAITHFULNESS, "status", faithfulness == 1 ? "pass" : "fail").increment();
+             meterRegistry.counter(CONTEXT_RELEVANCE, "status", contextRelevance == 1 ? "pass" : "fail").increment();
+             meterRegistry.counter(ANSWER_RELEVANCE, "status", answerRelevance == 1 ? "pass" : "fail").increment();
+
+        } else {
+            log.error("Triad Evaluation Failed. Could not extract 3 scores from: {}", evalResponse);
         }
     }
 }
