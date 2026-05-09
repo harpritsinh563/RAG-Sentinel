@@ -7,6 +7,8 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Gauge;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -39,6 +41,7 @@ public class RagChatService implements ChatService {
 
     // Simple heuristic strings for POC
     private static final List<String> CONTEXT_MISS_INDICATORS = List.of("i don't know", "i cannot answer", "not provided in the context", "i am an ai", "as an ai model", "no information available");
+    private static Logger log = LoggerFactory.getLogger(RagChatService.class);
 
     public RagChatService(ChatClient.Builder chatClientBuilder,
                           VectorStore vectorStore,
@@ -142,12 +145,14 @@ public class RagChatService implements ChatService {
             return;
         }
 
-        String lowerOutput = output.toLowerCase();
+        // Strip everything except letters, numbers, spaces, and apostrophes
+        String normalizedResponse = output.toLowerCase().replaceAll("[^a-z0-9\\s']", "").trim();
+        log.debug("Normalized Response : "+normalizedResponse);
 
-        boolean isContextMiss = CONTEXT_MISS_INDICATORS.stream()
-                .anyMatch(lowerOutput::contains);
+        boolean isHallucination = CONTEXT_MISS_INDICATORS.stream()
+                .anyMatch(indicator -> normalizedResponse.contains(indicator.toLowerCase()));
 
-        if (isContextMiss) {
+        if (isHallucination) {
             meterRegistry.counter(OUTPUT_GUARDRAIL_TRIPPED, REASON, CONTEXT_MISS).increment();
         }
     }
