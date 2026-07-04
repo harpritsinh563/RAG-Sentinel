@@ -16,4 +16,19 @@ public class AICustomMetrics {
     public static final String CONTEXT_RELEVANCE = "rag.eval.context_relevance";
     public static final String CHUNK_RETRIEVAL_COUNT = "rag.chunk.retrieval.count";
     public static final String GUARDRAIL_VIOLATION = "rag.guardrail.violation";
+
+    // Retrieval
+    public static final String RETRIEVAL_SIMILARITY = "rag.retrieval.similarity";
+    public static final String RETRIEVAL_SIMILARITY_AVG = RETRIEVAL_SIMILARITY+".avg";
+    public static final String RETRIEVAL_SIMILARITY_MAX = RETRIEVAL_SIMILARITY+".max";
+    public static final String RETRIEVAL_SIMILARITY_MIN = RETRIEVAL_SIMILARITY+".min";
+    public static final String RETRIEVAL_SIMILARITY_STDDEV = RETRIEVAL_SIMILARITY+".stddev";
+    public static final String RETRIEVAL_EMBEDDING_MODEL = "retrieval.embedding.model";
+    public static final String RETRIEVAL_DISTANCE = "rag.retrieval.distance";
+    public static final String RETRIEVAL_DISTANCE_AVG = RETRIEVAL_DISTANCE+".avg";
+    public static final String RETRIEVAL_DISTANCE_STDDEV = RETRIEVAL_DISTANCE+".stddev";
+    public static final String RETRIEVAL_DISTANCE_SPREAD = RETRIEVAL_DISTANCE+".spread";
+    public static final String RETRIEVAL_DOCUMENTS_COUNT = "retrieval.documents.count";
+    public static final String RETRIEVAL_EMPTY = "rag.retrieval.empty";
+    public static final String RETRIEVAL_TOP_SOURCE = "retrieval.top_source";
 }

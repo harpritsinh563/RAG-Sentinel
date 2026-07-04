@@ -7,6 +7,8 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.Span;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,8 +23,7 @@ import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.ragsentinel.constants.AICustomMetrics.*;
-import static com.ragsentinel.constants.AIModelConstants.MODEL;
-import static com.ragsentinel.constants.AIModelConstants.PHI3;
+import static com.ragsentinel.constants.AIModelConstants.*;
 import static com.ragsentinel.constants.MetricTags.*;
 
 /**
@@ -35,6 +36,7 @@ public class RagChatService implements ChatService {
     private final MeterRegistry meterRegistry;
     private final List<LLMTelemetryExtractor> telemetryExtractors;
     private final RAGTriadEvaluator ragTriadEvaluator;
+    private final Tracer tracer;
 
     // We use an AtomicReference so the Gauge can read the latest score dynamically
     private final AtomicReference<Double> latestSimilarityScore = new AtomicReference<>(0.0);
@@ -46,13 +48,15 @@ public class RagChatService implements ChatService {
     public RagChatService(ChatClient.Builder chatClientBuilder,
                           VectorStore vectorStore,
                           MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors,
-                          RAGTriadEvaluator ragTriadEvaluator
+                          RAGTriadEvaluator ragTriadEvaluator,
+                          Tracer tracer
                           ) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
         this.meterRegistry = meterRegistry;
         this.telemetryExtractors = llmTelemetryExtractors;
         this.ragTriadEvaluator = ragTriadEvaluator;
+        this.tracer = tracer;
 
         // Register the Gauge once during initialization
         Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get)
@@ -86,11 +90,25 @@ public class RagChatService implements ChatService {
     }
 
     private List<Document> performSimilaritySearch(String prompt) {
-        Timer.Sample sample = Timer.start(meterRegistry);
-        try {
-            return vectorStore.similaritySearch(prompt);
+        // 1. Create and start a new Span
+        Span searchSpan = tracer.nextSpan().name("rag.vector.search").start();
+
+        // 2. Put the span in scope so logs/downstream calls inherit the Trace ID
+        try (Tracer.SpanInScope ws = tracer.withSpan(searchSpan)) {
+
+            List<Document> documents = vectorStore.similaritySearch(prompt);
+
+            // 3. Process our quality metrics and tag the span
+            recordRetrievalQualityMetrics(documents, searchSpan);
+
+            return documents;
+
+        } catch (Exception e) {
+            searchSpan.error(e);
+            throw e;
         } finally {
-            sample.stop(meterRegistry.timer(VECTOR_SEARCH_LATENCY));
+            // 4. End the span (this automatically calculates and records the latency duration)
+            searchSpan.end();
         }
     }
 
@@ -177,4 +195,65 @@ public class RagChatService implements ChatService {
             meterRegistry.counter(CHUNK_RETRIEVAL_COUNT, CHUNK_ID, chunkSource).increment();
         }
     }
+
+    private void recordRetrievalQualityMetrics(List<Document> docs, Span span) {
+        if (docs == null || docs.isEmpty()) {
+            meterRegistry.counter(RETRIEVAL_EMPTY).increment();
+            span.tag(RETRIEVAL_DOCUMENTS_COUNT, "0");
+            return;
+        }
+
+        span.tag(RETRIEVAL_DOCUMENTS_COUNT, String.valueOf(docs.size()));
+
+        double sum = 0.0;
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+
+        // Pass 1: Find min, max, and sum
+        for (Document doc : docs) {
+            double distance = extractDistanceSafely(doc);
+            sum += distance;
+            min = Math.min(min, distance);
+            max = Math.max(max, distance);
+        }
+
+        double avg = sum / docs.size();
+
+        // Pass 2: Calculate Variance and Standard Deviation
+        double varianceSum = 0.0;
+        for (Document doc : docs) {
+            double distance = extractDistanceSafely(doc);
+            varianceSum += Math.pow(distance - avg, 2);
+        }
+        double stddev = Math.sqrt(varianceSum / docs.size());
+
+        // 1. Attach Attributes to the OpenTelemetry Span
+        span.tag(RETRIEVAL_SIMILARITY_AVG, String.format("%.4f", avg));
+        span.tag(RETRIEVAL_SIMILARITY_MAX, String.format("%.4f", max));
+        span.tag(RETRIEVAL_SIMILARITY_MIN, String.format("%.4f", min));
+        span.tag(RETRIEVAL_SIMILARITY_STDDEV, String.format("%.4f", stddev));
+        span.tag(RETRIEVAL_EMBEDDING_MODEL, NOMIC_EMBED_TEXT);
+
+        if (!docs.isEmpty()) {
+            // Tag the source of the best matching chunk for quick debugging
+            span.tag(RETRIEVAL_TOP_SOURCE, (String) docs.get(0).getMetadata().getOrDefault("source", "unknown"));
+        }
+
+        // 2. Record Time-Series Metrics for Prometheus/Grafana
+        // Using DistributionSummary allows Grafana to calculate percentiles over time
+        meterRegistry.summary(RETRIEVAL_DISTANCE_AVG).record(avg);
+        meterRegistry.summary(RETRIEVAL_DISTANCE_STDDEV).record(stddev);
+        meterRegistry.summary(RETRIEVAL_DISTANCE_SPREAD).record(max - min);
+    }
+
+    private double extractDistanceSafely(Document doc) {
+        Object distanceObj = doc.getMetadata().get("distance");
+        if (distanceObj instanceof Float) {
+            return ((Float) distanceObj).doubleValue();
+        } else if (distanceObj instanceof Double) {
+            return (Double) distanceObj;
+        }
+        return 0.0; // Fallback if metadata is missing
+    }
+
 }
