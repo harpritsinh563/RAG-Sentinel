@@ -303,6 +303,29 @@
         }
       ],
       "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 44 },
+      "id": 16,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "title": "Prompt Engine Overheads (Construction Latency vs Prompt Deployment Version)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line" },
+          "unit": "s"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(rag_prompt_construction_latency_seconds_sum[1m]) / rate(rag_prompt_construction_latency_seconds_count[1m])",
+          "legendFormat": "Template Build Engine ({{version}})",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 38,

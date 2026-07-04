@@ -2,6 +2,7 @@ package com.ragsentinel.service.chat.impl;
 
 import com.ragsentinel.constants.GeneralConstants;
 import com.ragsentinel.llmtelemetry.LLMTelemetryExtractor;
+import com.ragsentinel.prompt.PromptVersionManager;
 import com.ragsentinel.service.RAGTriadEvaluator;
 import com.ragsentinel.service.chat.ChatService;
 import io.micrometer.core.instrument.DistributionSummary;
@@ -40,6 +41,7 @@ public class RagChatService implements ChatService {
     private final List<LLMTelemetryExtractor> telemetryExtractors;
     private final RAGTriadEvaluator ragTriadEvaluator;
     private final Tracer tracer;
+    private final PromptVersionManager promptVersionManager;
 
     // We use an AtomicReference so the Gauge can read the latest score dynamically
     private final AtomicReference<Double> latestSimilarityScore = new AtomicReference<>(0.0);
@@ -57,7 +59,8 @@ public class RagChatService implements ChatService {
                           VectorStore vectorStore,
                           MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors,
                           RAGTriadEvaluator ragTriadEvaluator,
-                          Tracer tracer
+                          Tracer tracer,
+                          PromptVersionManager promptVersionManager
                           ) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
@@ -65,6 +68,7 @@ public class RagChatService implements ChatService {
         this.telemetryExtractors = llmTelemetryExtractors;
         this.ragTriadEvaluator = ragTriadEvaluator;
         this.tracer = tracer;
+        this.promptVersionManager = promptVersionManager;
 
         // Register the Gauge once during initialization
         Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get)
@@ -73,25 +77,37 @@ public class RagChatService implements ChatService {
     }
 
     @Override
-    public String chatWithContext(String prompt) {
-        // 1. Retrieve & track quality metrics/spans natively
-        List<Document> retrievedDocuments = performSimilaritySearch(prompt);
+    public String chatWithContext(String prompt, String sessionId) {
+        // 1. Resolve session parameters inside OTel Span definitions
+        Span currentSpan = tracer.currentSpan();
+        if (currentSpan != null) {
+            currentSpan.tag("rag.session.id", sessionId);
+        }
 
-        // 2. Filter out low-confidence payload noise
+        // 2. Core Search Lifecycle
+        List<Document> retrievedDocuments = performSimilaritySearch(prompt);
         List<Document> usedDocuments = filterAndTrackChunks(retrievedDocuments);
         String context = formatDocuments(usedDocuments);
 
-        // 3. Track payload size ratio
+        // 3. Context tracking metric updates
         trackWastageRatio(prompt, context);
 
-        // 4. Run execution loop
-        ChatResponse response = callLlmWithMetrics(prompt, context);
+        // 4. Construct Prompt via centralized prompt version system
+        String augmentedPrompt = promptVersionManager.buildAugmentedPrompt(prompt, context);
+
+        // 5. Model Inference Execution with precision session tracking tags
+        ChatResponse response = callLlmWithMetrics(augmentedPrompt, sessionId);
         String finalOutput = response.getResult().getOutput().getContent();
 
-        // 5. Output guardrails & Async evaluation
-        recordUsageMetrics(response);
+        // 6. Record usage metrics passing the dynamic version definitions
+        recordUsageMetrics(response, PromptVersionManager.ACTIVE_VERSION);
         checkOutputGuardrails(finalOutput);
+
+        // 7. Background Async Judge Lifecycle
         ragTriadEvaluator.evaluateTriadAsync(prompt, context, finalOutput);
+
+        // Record a generic heartbeat counter mapping interactions per session
+        meterRegistry.counter("rag.session.interactions", "session_id", sessionId).increment();
 
         return finalOutput;
     }
@@ -151,7 +167,7 @@ public class RagChatService implements ChatService {
         }
     }
 
-    private void recordUsageMetrics(ChatResponse response) {
+    private void recordUsageMetrics(ChatResponse response, String promptVersion) {
         if (response != null && response.getMetadata() != null) {
             ChatResponseMetadata metadata = response.getMetadata();
 
@@ -171,17 +187,17 @@ public class RagChatService implements ChatService {
                 meterRegistry.counter(RAG_TOKENS_USAGE,
                         TYPE, PROMPT,
                         MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(promptTokens);
+                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(promptTokens);
 
                 meterRegistry.counter(RAG_TOKENS_USAGE,
                         TYPE, COMPLETION,
                         MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(completionTokens);
+                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(completionTokens);
 
                 meterRegistry.counter(RAG_TOKENS_USAGE,
                         TYPE, TOTAL,
                         MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(totalTokens);
+                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(totalTokens);
             }
 
             // 3. Delegate to specific extractors (e.g., Ollama for load/eval durations)
