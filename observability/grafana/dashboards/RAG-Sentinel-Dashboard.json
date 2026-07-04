@@ -219,6 +219,90 @@
         }
       ],
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+      "id": 13,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Token Footprint Profile (Granular Breakdown)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "stacking": { "group": "A", "mode": "normal" } },
+          "unit": "tps"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(rag_tokens_usage_total[1m])) by (type, model, prompt_version)",
+          "legendFormat": "{{model}} - {{type}} ({{prompt_version}})",
+          "refId": "A"
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 36 },
+      "id": 14,
+      "options": {
+        "orientation": "vertical",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+      },
+      "title": "Pruning Engine Efficiency",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(rag_context_chunks_total[15m])) by (state)",
+          "legendFormat": "Chunks {{state}}",
+          "refId": "A"
+        }
+      ],
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 4000 },
+              { "color": "red", "value": 8000 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 36 },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Avg post-prune context payload mass",
+      "targets": [
+        {
+          "expr": "rate(rag_context_payload_chars_sum[1m]) / rate(rag_context_payload_chars_count[1m])",
+          "legendFormat": "Avg Characters",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
     }
   ],
   "schemaVersion": 38,

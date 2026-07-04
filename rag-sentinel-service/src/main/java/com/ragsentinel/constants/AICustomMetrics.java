@@ -11,6 +11,8 @@ public class AICustomMetrics {
     public static final String TOKEN_GENERATION_TIME = "llm.duration.generation";
     public static final String MODEL_LOAD_TIME = "llm.duration.load";
     public static final String WASTAGE_RATIO = "rag.context.wastage_ratio";
+    public static final String CONTEXT_CHUNKS = "rag.context.chunks";
+    public static final String CONTEXT_PAYLOAD_CHARS = "rag.context.payload.chars";
     public static final String FAITHFULNESS = "rag.eval.faithfulness";
     public static final String ANSWER_RELEVANCE = "rag.eval.answer_relevance";
     public static final String CONTEXT_RELEVANCE = "rag.eval.context_relevance";
@@ -31,4 +33,8 @@ public class AICustomMetrics {
     public static final String RETRIEVAL_DOCUMENTS_COUNT = "retrieval.documents.count";
     public static final String RETRIEVAL_EMPTY = "rag.retrieval.empty";
     public static final String RETRIEVAL_TOP_SOURCE = "retrieval.top_source";
+
+
+    // Token Usage
+    public static final String RAG_TOKENS_USAGE = "rag.tokens.usage";
 }

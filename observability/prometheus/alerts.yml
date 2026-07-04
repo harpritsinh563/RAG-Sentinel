@@ -21,3 +21,24 @@ groups:
         annotations:
           summary: "Spike in empty vector DB results"
           description: "The system has recorded more than 50 empty document retrieval operations within a 5-minute window. Users are targeting queries completely outside the current knowledge base, or the embedding sync pipeline is down."
+
+      # Alert if the context filtering mechanism is discarding 100% of documents,
+      # which suggests the vector DB data is mismatching or thresholds are too high.
+      - alert: RAGHighContextDiscardRate
+        expr: (sum(increase(rag_context_chunks_total{state="discarded"}[5m])) / sum(increase(rag_context_chunks_total{state="retrieved"}[5m]))) > 0.90
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Critical data pruning anomaly detected"
+          description: "Over 90% of retrieved context documents are being discarded by the confidence threshold filter over the last 3 minutes. The LLM is operating on near-empty context window parameters."
+
+      # Alert if token consumption spikes dramatically due to unexpected loops or huge contexts
+      - alert: RAGTokenVelocitySpike
+        expr: sum(rate(rag_tokens_usage_total{type="total"}[1m])) > 5000
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Token ingestion limits exceeded"
+          description: "Total token consumption velocity has crossed 5,000 tokens/sec. Investigate client prompt behavior or vector payload amplification immediately to mitigate compute costs."

@@ -1,5 +1,6 @@
 package com.ragsentinel.service.chat.impl;
 
+import com.ragsentinel.constants.GeneralConstants;
 import com.ragsentinel.llmtelemetry.LLMTelemetryExtractor;
 import com.ragsentinel.service.RAGTriadEvaluator;
 import com.ragsentinel.service.chat.ChatService;
@@ -18,12 +19,14 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.ragsentinel.constants.AICustomMetrics.*;
 import static com.ragsentinel.constants.AIModelConstants.*;
+import static com.ragsentinel.constants.GeneralConstants.*;
 import static com.ragsentinel.constants.MetricTags.*;
 
 /**
@@ -44,6 +47,11 @@ public class RagChatService implements ChatService {
     // Simple heuristic strings for POC
     private static final List<String> CONTEXT_MISS_INDICATORS = List.of("i don't know", "i cannot answer", "not provided in the context", "i am an ai", "as an ai model", "no information available");
     private static Logger log = LoggerFactory.getLogger(RagChatService.class);
+
+    // Add a strict threshold: e.g., if distance > 0.75, the chunk is garbage.
+    // Note: For Cosine Distance, lower is better. Adjust based on your embedding model's typical spread.
+    private static final double MAX_DISTANCE_THRESHOLD = 0.75;
+    private static final String PROMPT_VERSION = "v1.0.0";
 
     public RagChatService(ChatClient.Builder chatClientBuilder,
                           VectorStore vectorStore,
@@ -66,25 +74,24 @@ public class RagChatService implements ChatService {
 
     @Override
     public String chatWithContext(String prompt) {
-        // Retrieve Context & Track Score
-        List<Document> documents = performSimilaritySearch(prompt);
-        updateTopScoreMetric(documents);
-        String context = formatDocuments(documents);
+        // 1. Retrieve & track quality metrics/spans natively
+        List<Document> retrievedDocuments = performSimilaritySearch(prompt);
 
-        // Track Context Wastage / Bloat Ratio
-        trackWastageRatio(prompt,context);
-        trackChunkHitRate(documents);
+        // 2. Filter out low-confidence payload noise
+        List<Document> usedDocuments = filterAndTrackChunks(retrievedDocuments);
+        String context = formatDocuments(usedDocuments);
 
-        // Generate Response & Track LLM Latency
+        // 3. Track payload size ratio
+        trackWastageRatio(prompt, context);
+
+        // 4. Run execution loop
         ChatResponse response = callLlmWithMetrics(prompt, context);
         String finalOutput = response.getResult().getOutput().getContent();
 
-        // Track Usage & Output Guardrails
+        // 5. Output guardrails & Async evaluation
         recordUsageMetrics(response);
         checkOutputGuardrails(finalOutput);
-
-        // Async evaluation of answer,context relevance and faithfullness
-        ragTriadEvaluator.evaluateTriadAsync(prompt,context,finalOutput);
+        ragTriadEvaluator.evaluateTriadAsync(prompt, context, finalOutput);
 
         return finalOutput;
     }
@@ -145,17 +152,44 @@ public class RagChatService implements ChatService {
     }
 
     private void recordUsageMetrics(ChatResponse response) {
-        if (response != null && response.getMetadata() != null && response.getMetadata().getUsage() != null) {
-            long totalTokens = response.getMetadata().getUsage().getTotalTokens();
-            meterRegistry.counter(TOKENS_USAGE, MODEL, PHI3).increment(totalTokens);
+        if (response != null && response.getMetadata() != null) {
+            ChatResponseMetadata metadata = response.getMetadata();
+
+            // 1. Dynamically extract the model name (with a fallback)
+            String modelName = metadata.getModel();
+            if (modelName == null || modelName.isBlank()) {
+                modelName = "unknown_model";
+            }
+
+            // 2. Safely extract and record usage
+            if (metadata.getUsage() != null) {
+                var usage = metadata.getUsage();
+                long promptTokens = usage.getPromptTokens();
+                long completionTokens = usage.getGenerationTokens(); // or getCompletionTokens()
+                long totalTokens = usage.getTotalTokens();
+
+                meterRegistry.counter(RAG_TOKENS_USAGE,
+                        TYPE, PROMPT,
+                        MODEL, modelName,
+                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(promptTokens);
+
+                meterRegistry.counter(RAG_TOKENS_USAGE,
+                        TYPE, COMPLETION,
+                        MODEL, modelName,
+                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(completionTokens);
+
+                meterRegistry.counter(RAG_TOKENS_USAGE,
+                        TYPE, TOTAL,
+                        MODEL, modelName,
+                        GeneralConstants.PROMPT_VERSION, PROMPT_VERSION).increment(totalTokens);
+            }
+
+            // 3. Delegate to specific extractors (e.g., Ollama for load/eval durations)
+            telemetryExtractors.stream()
+                    .filter(extractor -> extractor.supports(metadata))
+                    .findFirst()
+                    .ifPresent(extractor -> extractor.extractAndRecord(metadata));
         }
-
-        ChatResponseMetadata metadata = response.getMetadata();
-
-        telemetryExtractors.stream()
-                .filter(extractor -> extractor.supports(metadata))
-                .findFirst()
-                .ifPresent(extractor -> extractor.extractAndRecord(metadata));
     }
 
     private void checkOutputGuardrails(String output) {
@@ -254,6 +288,32 @@ public class RagChatService implements ChatService {
             return (Double) distanceObj;
         }
         return 0.0; // Fallback if metadata is missing
+    }
+
+    private List<Document> filterAndTrackChunks(List<Document> docs) {
+        int retrievedCount = docs.size();
+        List<Document> usedDocs = new ArrayList<>();
+        int discardedCount = 0;
+
+        for (Document doc : docs) {
+            double distance = extractDistanceSafely(doc);
+            if (distance <= MAX_DISTANCE_THRESHOLD) {
+                usedDocs.add(doc);
+            } else {
+                discardedCount++;
+            }
+        }
+
+        // Record the lifecycle of the chunks
+        meterRegistry.counter(CONTEXT_CHUNKS, STATE, RETRIEVED).increment(retrievedCount);
+        meterRegistry.counter(CONTEXT_CHUNKS, STATE, USED).increment(usedDocs.size());
+        meterRegistry.counter(CONTEXT_CHUNKS, STATE, DISCARDED).increment(discardedCount);
+
+        // Calculate and record the final context size in characters for payload hygiene
+        int totalCharacters = usedDocs.stream().mapToInt(doc -> doc.getContent().length()).sum();
+        meterRegistry.summary(CONTEXT_PAYLOAD_CHARS).record(totalCharacters);
+
+        return usedDocs;
     }
 
 }
