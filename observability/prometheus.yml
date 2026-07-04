@@ -2,13 +2,14 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
+rule_files:
+  - "./prometheus/alerts.yml" # Link the rule file here
+
 scrape_configs:
-  # 1. Scrape Prometheus itself
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-# 2. Scrape Spring Boot directly (Bypassing OTel for metrics)
   - job_name: 'spring-boot'
     metrics_path: '/actuator/prometheus'
     static_configs:

@@ -1,0 +1,23 @@
+groups:
+  - name: rag-retrieval-alerts
+    rules:
+      # Alert if the standard deviation of retrieved documents remains high,
+      # indicating the LLM is consistently receiving a mix of good context and garbage.
+      - alert: RAGHighRetrievalVariance
+        expr: (rate(rag_retrieval_distance_stddev_sum[5m]) / rate(rag_retrieval_distance_stddev_count[5m])) > 0.4
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High semantic retrieval variance detected"
+          description: "The standard deviation of vector search document distances has crossed 0.4 for over 2 minutes. The LLM is processing highly inconsistent context windows, increasing the risk of distraction or hallucinations."
+
+      # Alert if out-of-domain queries spike significantly
+      - alert: RAGSpikeInEmptyRetrievals
+        expr: sum(increase(rag_retrieval_empty_total[5m])) > 50
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Spike in empty vector DB results"
+          description: "The system has recorded more than 50 empty document retrieval operations within a 5-minute window. Users are targeting queries completely outside the current knowledge base, or the embedding sync pipeline is down."

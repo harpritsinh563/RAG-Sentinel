@@ -152,6 +152,73 @@
       "title": "Hot Documents (Chunk Hit Rate)",
       "targets": [ { "expr": "sum(increase(rag_chunk_retrieval_count_total[1h])) by (chunk_id)", "legendFormat": "{{chunk_id}}", "refId": "A" } ],
       "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 2 },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["sum"] }
+      },
+      "title": "Empty Retrievals (Out of Domain)",
+      "targets": [
+        {
+          "expr": "sum(increase(rag_retrieval_empty_total[15m]))",
+          "legendFormat": "Empty Results",
+          "refId": "A"
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "id": 12,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "Retrieval Window Quality Metrics (Distance Trends)",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
+          "unit": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(rag_retrieval_distance_avg_sum[1m]) / rate(rag_retrieval_distance_avg_count[1m])",
+          "legendFormat": "Average Distance (μ)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(rag_retrieval_distance_stddev_sum[1m]) / rate(rag_retrieval_distance_stddev_count[1m])",
+          "legendFormat": "Standard Deviation (σ)",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(rag_retrieval_distance_spread_sum[1m]) / rate(rag_retrieval_distance_spread_count[1m])",
+          "legendFormat": "Distance Spread (Max - Min)",
+          "refId": "C"
+        }
+      ],
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 38,
