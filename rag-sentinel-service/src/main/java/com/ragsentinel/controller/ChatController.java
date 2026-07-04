@@ -4,8 +4,10 @@ import com.ragsentinel.filter.SessionTrackingFilter;
 import com.ragsentinel.service.chat.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import static com.ragsentinel.constants.EndpointConstants.CHAT;
 
@@ -19,17 +21,16 @@ public class ChatController {
         this.chatService = chatService;
     }
 
-    @PostMapping
-    public ResponseEntity<String> generateResponse(
+    @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> generateResponse(
             @RequestParam(name = "prompt") String prompt,
             @RequestHeader(name = "X-Session-ID", required = false) String sessionId) {
 
-        // Fallback calculation if executed outside HTTP thread context
         if (sessionId == null || sessionId.isBlank()) {
             sessionId = org.slf4j.MDC.get(SessionTrackingFilter.MDC_SESSION_ID);
         }
 
-        log.info("Received request for session [{}]: {}", sessionId, prompt);
-        return ResponseEntity.ok(chatService.chatWithContext(prompt, sessionId));
+        log.info("Received streaming request for session [{}]: {}", sessionId, prompt);
+        return chatService.streamChatWithContext(prompt, sessionId);
     }
 }

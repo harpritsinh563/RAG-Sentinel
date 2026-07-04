@@ -19,6 +19,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,13 +56,7 @@ public class RagChatService implements ChatService {
     private static final double MAX_DISTANCE_THRESHOLD = 0.75;
     private static final String PROMPT_VERSION = "v1.0.0";
 
-    public RagChatService(ChatClient.Builder chatClientBuilder,
-                          VectorStore vectorStore,
-                          MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors,
-                          RAGTriadEvaluator ragTriadEvaluator,
-                          Tracer tracer,
-                          PromptVersionManager promptVersionManager
-                          ) {
+    public RagChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore, MeterRegistry meterRegistry, List<LLMTelemetryExtractor> llmTelemetryExtractors, RAGTriadEvaluator ragTriadEvaluator, Tracer tracer, PromptVersionManager promptVersionManager) {
         this.chatClient = chatClientBuilder.build();
         this.vectorStore = vectorStore;
         this.meterRegistry = meterRegistry;
@@ -71,45 +66,67 @@ public class RagChatService implements ChatService {
         this.promptVersionManager = promptVersionManager;
 
         // Register the Gauge once during initialization
-        Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get)
-                .description("The distance score of the top retrieved document")
-                .register(meterRegistry);
+        Gauge.builder(VECTOR_TOP_SCORE, latestSimilarityScore, AtomicReference::get).description("The distance score of the top retrieved document").register(meterRegistry);
     }
 
     @Override
     public String chatWithContext(String prompt, String sessionId) {
-        // 1. Resolve session parameters inside OTel Span definitions
-        Span currentSpan = tracer.currentSpan();
-        if (currentSpan != null) {
-            currentSpan.tag("rag.session.id", sessionId);
-        }
+        // 1. Prepare payload
+        RagPayload payload = prepareRagPayload(prompt, sessionId);
 
-        // 2. Core Search Lifecycle
-        List<Document> retrievedDocuments = performSimilaritySearch(prompt);
-        List<Document> usedDocuments = filterAndTrackChunks(retrievedDocuments);
-        String context = formatDocuments(usedDocuments);
-
-        // 3. Context tracking metric updates
-        trackWastageRatio(prompt, context);
-
-        // 4. Construct Prompt via centralized prompt version system
-        String augmentedPrompt = promptVersionManager.buildAugmentedPrompt(prompt, context);
-
-        // 5. Model Inference Execution with precision session tracking tags
-        ChatResponse response = callLlmWithMetrics(augmentedPrompt, sessionId);
+        // 2. Sync Execution
+        ChatResponse response = callLlmWithMetrics(payload.augmentedPrompt(), sessionId);
         String finalOutput = response.getResult().getOutput().getContent();
 
-        // 6. Record usage metrics passing the dynamic version definitions
+        // 3. Sync Post-Processing
         recordUsageMetrics(response, PromptVersionManager.ACTIVE_VERSION);
         checkOutputGuardrails(finalOutput);
+        ragTriadEvaluator.evaluateTriadAsync(prompt, payload.context(), finalOutput);
 
-        // 7. Background Async Judge Lifecycle
-        ragTriadEvaluator.evaluateTriadAsync(prompt, context, finalOutput);
-
-        // Record a generic heartbeat counter mapping interactions per session
         meterRegistry.counter("rag.session.interactions", "session_id", sessionId).increment();
 
         return finalOutput;
+    }
+
+    @Override
+    public Flux<String> streamChatWithContext(String prompt, String sessionId) {
+        // 1. Prepare payload
+        RagPayload payload = prepareRagPayload(prompt, sessionId);
+
+        // 2. Async Execution (Streaming)
+        return streamLlmWithMetrics(payload.augmentedPrompt(), sessionId, prompt, payload.context());
+    }
+
+    private Flux<String> streamLlmWithMetrics(String augmentedPrompt, String sessionId, String originalPrompt, String context) {
+        java.util.concurrent.atomic.AtomicBoolean isFirstToken = new java.util.concurrent.atomic.AtomicBoolean(true);
+
+        // We use a StringBuilder to capture the chunks as they stream past
+        StringBuilder aggregatedAnswer = new StringBuilder();
+
+        return chatClient.prompt().user(augmentedPrompt).stream().chatResponse().transformDeferredContextual((chatResponseFlux, ctx) -> {
+            io.micrometer.core.instrument.Timer.Sample ttftSample = io.micrometer.core.instrument.Timer.start(meterRegistry);
+
+            return chatResponseFlux.doOnNext(response -> {
+                // Capture TTFT
+                if (isFirstToken.compareAndSet(true, false)) {
+                    ttftSample.stop(meterRegistry.timer("rag.llm.ttft", "session_id", sessionId));
+                }
+
+                // Append the current chunk to our aggregated answer
+                if (response.getResult() != null && response.getResult().getOutput() != null) {
+                    aggregatedAnswer.append(response.getResult().getOutput().getContent());
+                }
+            }).doOnComplete(() -> {
+                // Stream is fully closed! Safe to run the async guardrails and judge.
+                String finalAnswer = aggregatedAnswer.toString();
+
+                // Note: Token usage for streams is usually attached to the LAST chunk's metadata in Spring AI.
+                checkOutputGuardrails(finalAnswer);
+                ragTriadEvaluator.evaluateTriadAsync(originalPrompt, context, finalAnswer);
+
+                meterRegistry.counter("rag.session.interactions", "session_id", sessionId).increment();
+            });
+        }).map(response -> response.getResult().getOutput().getContent());
     }
 
     private List<Document> performSimilaritySearch(String prompt) {
@@ -148,9 +165,7 @@ public class RagChatService implements ChatService {
     }
 
     private String formatDocuments(List<Document> documents) {
-        return documents.stream()
-                .map(Document::getContent)
-                .collect(Collectors.joining("\n"));
+        return documents.stream().map(Document::getContent).collect(Collectors.joining("\n"));
     }
 
     private ChatResponse callLlmWithMetrics(String prompt, String context) {
@@ -158,10 +173,7 @@ public class RagChatService implements ChatService {
 
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            return chatClient.prompt()
-                    .user(augmentedPrompt)
-                    .call()
-                    .chatResponse();
+            return chatClient.prompt().user(augmentedPrompt).call().chatResponse();
         } finally {
             sample.stop(meterRegistry.timer(LLM_GENERATION_LATENCY));
         }
@@ -184,27 +196,15 @@ public class RagChatService implements ChatService {
                 long completionTokens = usage.getGenerationTokens(); // or getCompletionTokens()
                 long totalTokens = usage.getTotalTokens();
 
-                meterRegistry.counter(RAG_TOKENS_USAGE,
-                        TYPE, PROMPT,
-                        MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(promptTokens);
+                meterRegistry.counter(RAG_TOKENS_USAGE, TYPE, PROMPT, MODEL, modelName, GeneralConstants.PROMPT_VERSION, promptVersion).increment(promptTokens);
 
-                meterRegistry.counter(RAG_TOKENS_USAGE,
-                        TYPE, COMPLETION,
-                        MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(completionTokens);
+                meterRegistry.counter(RAG_TOKENS_USAGE, TYPE, COMPLETION, MODEL, modelName, GeneralConstants.PROMPT_VERSION, promptVersion).increment(completionTokens);
 
-                meterRegistry.counter(RAG_TOKENS_USAGE,
-                        TYPE, TOTAL,
-                        MODEL, modelName,
-                        GeneralConstants.PROMPT_VERSION, promptVersion).increment(totalTokens);
+                meterRegistry.counter(RAG_TOKENS_USAGE, TYPE, TOTAL, MODEL, modelName, GeneralConstants.PROMPT_VERSION, promptVersion).increment(totalTokens);
             }
 
             // 3. Delegate to specific extractors (e.g., Ollama for load/eval durations)
-            telemetryExtractors.stream()
-                    .filter(extractor -> extractor.supports(metadata))
-                    .findFirst()
-                    .ifPresent(extractor -> extractor.extractAndRecord(metadata));
+            telemetryExtractors.stream().filter(extractor -> extractor.supports(metadata)).findFirst().ifPresent(extractor -> extractor.extractAndRecord(metadata));
         }
     }
 
@@ -215,10 +215,9 @@ public class RagChatService implements ChatService {
 
         // Strip everything except letters, numbers, spaces, and apostrophes
         String normalizedResponse = output.toLowerCase().replaceAll("[^a-z0-9\\s']", "").trim();
-        log.debug("Normalized Response : "+normalizedResponse);
+        log.debug("Normalized Response : " + normalizedResponse);
 
-        boolean isHallucination = CONTEXT_MISS_INDICATORS.stream()
-                .anyMatch(indicator -> normalizedResponse.contains(indicator.toLowerCase()));
+        boolean isHallucination = CONTEXT_MISS_INDICATORS.stream().anyMatch(indicator -> normalizedResponse.contains(indicator.toLowerCase()));
 
         if (isHallucination) {
             meterRegistry.counter(OUTPUT_GUARDRAIL_TRIPPED, REASON, CONTEXT_MISS).increment();
@@ -232,10 +231,7 @@ public class RagChatService implements ChatService {
         double ratio = (double) context.length() / prompt.length();
 
         // DistributionSummary is perfect for tracking ratios/sizes over time
-        DistributionSummary.builder(WASTAGE_RATIO)
-                .description("Ratio of retrieved context size to original prompt size")
-                .register(meterRegistry)
-                .record(ratio);
+        DistributionSummary.builder(WASTAGE_RATIO).description("Ratio of retrieved context size to original prompt size").register(meterRegistry).record(ratio);
     }
 
     private void trackChunkHitRate(List<Document> documents) {
@@ -330,6 +326,30 @@ public class RagChatService implements ChatService {
         meterRegistry.summary(CONTEXT_PAYLOAD_CHARS).record(totalCharacters);
 
         return usedDocs;
+    }
+
+    private record RagPayload(String augmentedPrompt, String context) {
+    }
+
+    private RagPayload prepareRagPayload(String prompt, String sessionId) {
+        // 1. Session Tracing
+        Span currentSpan = tracer.currentSpan();
+        if (currentSpan != null) {
+            currentSpan.tag("rag.session.id", sessionId);
+        }
+
+        // 2. Vector Retrieval & Quality Filtering
+        List<Document> retrievedDocuments = performSimilaritySearch(prompt);
+        List<Document> usedDocuments = filterAndTrackChunks(retrievedDocuments);
+        String context = formatDocuments(usedDocuments);
+
+        // 3. Payload Analytics
+        trackWastageRatio(prompt, context);
+
+        // 4. Prompt Engine
+        String augmentedPrompt = promptVersionManager.buildAugmentedPrompt(prompt, context);
+
+        return new RagPayload(augmentedPrompt, context);
     }
 
 }
