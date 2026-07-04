@@ -1,3 +1,7 @@
+server:
+  tomcat:
+    connection-timeout: 120000
+
 spring:
   application:
     name: rag-observer-sentinel
@@ -6,8 +10,12 @@ spring:
     username: postgres
     password: password
   ai:
+    retry:
+      max-attempts: 2
     ollama:
       base-url: http://127.0.0.1:11434
+      init:
+        timeout: 180
       chat:
         options:
           model: phi3

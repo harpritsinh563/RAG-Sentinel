@@ -1,6 +1,8 @@
 package com.ragsentinel.controller;
 
 import com.ragsentinel.service.chat.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +15,7 @@ import static com.ragsentinel.constants.EndpointConstants.CHAT;
 @RequestMapping(CHAT)
 public class ChatController {
     private final ChatService chatService;
+    private static Logger log = LoggerFactory.getLogger(ChatController.class);
 
     public ChatController(ChatService chatService) {
         this.chatService = chatService;
@@ -20,6 +23,7 @@ public class ChatController {
 
     @PostMapping
     public ResponseEntity<String> generateResponse(@RequestParam(name = "prompt") String prompt) {
+        log.info("Received request : "+prompt);
         return ResponseEntity.ok(chatService.chatWithContext(prompt));
     }
 }

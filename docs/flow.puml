@@ -1,72 +1,106 @@
-@startuml RAG_Observer_Sentinel_Flow
-!theme plain
-skinparam defaultFontName Arial
-skinparam maxMessageSize 150
-autonumber
+@startuml RAG_Observer_Sentinel_Architecture
+!pragma teoz true
 
-' --- Import Standard Library Icons ---
-!include <tupadr3/common>
-!include <tupadr3/devicons/java>
-!include <tupadr3/devicons/postgresql>
+' --- Elite Architecture Styling ---
+skinparam backgroundColor #FCFDFD
+skinparam defaultFontName "Helvetica Neue", "Segoe UI", sans-serif
+skinparam defaultFontSize 13
+skinparam roundcorner 8
+skinparam maxMessageSize 200
+autonumber "<b>[00]</b>"
+
+skinparam sequence {
+    ArrowColor #34495E
+    ArrowThickness 1.2
+    LifeLineBorderColor #95A5A6
+    LifeLineBackgroundColor #F2F4F4
+    
+    ParticipantBorderColor #2C3E50
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantFontColor #2C3E50
+    ParticipantFontSize 14
+    ParticipantFontName "Helvetica Neue", sans-serif
+    
+    GroupBorderColor #BDC3C7
+    GroupHeaderFontColor #2C3E50
+    GroupBackgroundColor #FFFFFF
+    
+    NoteBackgroundColor #FDFEFE
+    NoteBorderColor #D5D8DC
+    NoteFontColor #34495E
+    NoteShadowing false
+}
+
+skinparam box {
+    Padding 20
+}
+
+' --- Import Universally Supported FontAwesome Icons ---
+!include <tupadr3/font-awesome-5/laptop_code>
+!include <tupadr3/font-awesome-5/leaf>
+!include <tupadr3/font-awesome-5/database>
 !include <tupadr3/font-awesome-5/brain>
+!include <tupadr3/font-awesome-5/network_wired>
 !include <tupadr3/font-awesome-5/chart_line>
-!include <tupadr3/font-awesome-5/project_diagram>
-!include <tupadr3/font-awesome-5/user_astronaut>
+!include <tupadr3/font-awesome-5/chart_pie>
 
-' --- Define Participants with Icons ---
-actor "<$user_astronaut>\nClient\n(Postman/Script)" as Client
-box "Application Tier" #LightBlue
-participant "<$java>\nSpring Boot\n(RAG Service)" as App
+' --- Define Participants with Bulletproof Color Syntax ---
+actor "<color:#2C3E50><$laptop_code></color>\nClient App" as Client
+
+box "Application Tier" #F8F9F9
+participant "<color:#6DB33F><$leaf></color>\nSpring Boot\n(RAG Service)" as App
 end box
 
-box "Data & AI Tier" #LightYellow
-participant "<$postgresql>\nPgVector\n(Vector DB)" as DB
-participant "<$brain>\nOllama\n(Phi-3 LLM)" as LLM
+box "Data & Inference Tier" #F4F6F6
+participant "<color:#336791><$database></color>\nPgVector\n(Vector DB)" as DB
+participant "<color:#8E44AD><$brain></color>\nOllama\n(Phi-3 LLM)" as LLM
 end box
 
-box "Observability Tier" #LightGreen
-participant "<$project_diagram>\nOTel Collector" as OTel
-participant "<$chart_line>\nPrometheus" as Prom
-participant "<$chart_line>\nGrafana" as Grafana
+box "Telemetry & Observability Tier" #F8F9F9
+participant "<color:#2980B9><$network_wired></color>\nOTel Collector" as OTel
+participant "<color:#E67E22><$chart_line></color>\nPrometheus" as Prom
+participant "<color:#F39C12><$chart_pie></color>\nGrafana" as Grafana
 end box
 
 ' --- Synchronous RAG Flow ---
 == Synchronous Request Lifecycle ==
 
 Client -> App: POST /api/chat\n{"prompt": "Explain architecture..."}
-activate App
+activate App #E8F8F5
 
 note right of App
-  **Interceptor:** PromptGuard
-  Records metric: ""rag.guardrail.violation""
+  **Security Interceptor**
+  evaluates input guardrails.
+  <i>Metric: rag.guardrail.violation</i>
 end note
 
-App -> DB: Vector Similarity Search (Query)
-activate DB
+App -> DB: Vector Similarity Search
+activate DB #EAF2F8
 DB --> App: Top-K Document Chunks
 deactivate DB
 
 note right of App
-  **Evaluation:** Context Wastage
-  Records metric: ""rag.chunk.retrieval.count""
-  Records metric: ""rag.context.wastage_ratio""
+  **Context Analysis**
+  <i>Metric: rag.chunk.retrieval.count</i>
+  <i>Metric: rag.context.wastage_ratio</i>
 end note
 
 App -> LLM: Generate Response\n(Prompt + Retrieved Context)
-activate LLM
+activate LLM #F5EEF8
 LLM --> App: LLM String Output +\nToken/Duration Stats
 deactivate LLM
 
 note right of App
-  **Interceptor:** OutputGuard
-  Records metric: ""rag.guardrail.output.tripped""
+  **Output Interceptor**
+  evaluates for hallucinations.
+  <i>Metric: rag.guardrail.output.tripped</i>
 end note
 
-App --> Client: HTTP 200 OK (Response)
+App --> Client: HTTP 200 OK (JSON Response)
 deactivate App
 
 ' --- Asynchronous Telemetry Flow ---
-== Asynchronous Observability & Telemetry Flow ==
+== Asynchronous Observability Flow ==
 
 group Distributed Tracing (Push)
     App -> OTel: Push Span Data (OOTB Spring OTel)\n[Vector Latency, LLM Latency]
@@ -74,29 +108,31 @@ end
 
 group RAG Triad Evaluation (Async Background)
     App -> App: triggerAsyncTriad()
+    activate App #FEF9E7
     note right of App
       Calculates Faithfulness, 
-      Context Relevance, Answer Relevance
-      Updates Micrometer Registries
+      Context Relevance, Answer Relevance.
+      Updates Micrometer Registries.
     end note
+    deactivate App
 end
 
 group Metrics Scraping (Pull)
     loop Every 5 seconds
         Prom -> App: GET /actuator/prometheus
-        activate App
+        activate App #FDEDEC
         App --> Prom: Scrape Payload (Prometheus Format)
         deactivate App
         note right of Prom
           Ingests latencies, guardrail 
-          trips, triad scores, token usage
+          trips, triad scores, token usage.
         end note
     end
 end
 
 group Visualizing the Data
     Grafana -> Prom: Execute PromQL Queries
-    activate Prom
+    activate Prom #FEF5E7
     Prom --> Grafana: Time-series Data
     deactivate Prom
     Grafana -> Grafana: Render Sentinel Dashboard

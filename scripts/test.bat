@@ -19,7 +19,7 @@ echo  Done.
 
 :: 3. The Hallucination (Output Guardrail & Triad Fails)
 echo 🟠 Triggering Hallucinations (FluxCapacitor)...
-curl.exe -s -X POST "%API_URL%" -d "prompt=Explain the configuration of the Quantum FluxCapacitor module. If not in context, say I don't know." > nul
+curl.exe -s -X POST "%API_URL%" -d "prompt=Explain the configuration steps for the Quantum FluxCapacitor Enterprise Module. If the answer is not in the context, reply exactly with: I don't know." > nul
 echo  Done.
 
 :: 4. The Context Wastage (High Ratio)
