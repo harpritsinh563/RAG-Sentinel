@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Map;
 
 import static com.ragsentinel.constants.AICustomMetrics.*;
 
@@ -49,39 +50,46 @@ public class OllamaTelemetryExtractor implements LLMTelemetryExtractor {
 
     @Override
     public boolean supports(ChatResponseMetadata metadata) {
-        return metadata != null && metadata.getClass().getSimpleName().toLowerCase().contains("ollama");
+        return metadata != null && metadata.getModel().toLowerCase().contains("phi3");
     }
 
     @Override
     public void extractAndRecord(ChatResponseMetadata metadata) {
-        recordDuration(promptEvalTimer, "getPromptEvalDuration", extractDuration(metadata, "getPromptEvalDuration"));
-        recordDuration(generationTimer, "getEvalDuration", extractDuration(metadata, "getEvalDuration"));
-        recordDuration(modelLoadTimer, "getLoadDuration", extractDuration(metadata, "getLoadDuration"));
-    }
+        Map<String, Object> internalMap = extractHiddenMap(metadata);
 
-    private Duration extractDuration(ChatResponseMetadata metadata, String methodName) {
-        try {
-            Method method = metadata.getClass().getMethod(methodName);
-            Object result = method.invoke(metadata);
-
-            if (result instanceof Duration) {
-                return (Duration) result;
-            } else if (result instanceof Long) {
-                return Duration.ofNanos((Long) result);
-            }
-        } catch (Exception e) {
-            // Switched to debug. No need to spam error logs if Ollama omits a specific metric.
-            log.debug("Could not extract {} from metadata. Method may not exist.", methodName);
-        }
-        return null;
-    }
-
-    // 3. Safe Recording to the Pre-Registered Timers
-    private void recordDuration(Timer timer, String methodName, Duration duration) {
-        if (duration != null && !duration.isZero()) {
-            timer.record(duration);
+        if (!internalMap.isEmpty()) {
+            log.debug("Extracting metrics from Ollama internal map...");
+            recordDuration(promptEvalTimer, (Duration) internalMap.get("prompt-eval-duration"));
+            recordDuration(generationTimer, (Duration) internalMap.get("eval-duration"));
+            recordDuration(modelLoadTimer, (Duration) internalMap.get("load-duration"));
         } else {
-            log.warn("Ollama metadata missing or zero for: {}", methodName);
+            log.debug("Ollama internal map was empty or inaccessible.");
         }
+    }
+
+    // Pass the pre-registered Timer object directly
+    private void recordDuration(Timer timer, Duration duration) {
+        // We keep the zero-check removed so that flatline zero load-times are captured
+        if (duration != null) {
+            timer.record(duration);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractHiddenMap(Object obj) {
+        Class<?> clazz = obj.getClass();
+        while (clazz != null) {
+            try {
+                java.lang.reflect.Field field = clazz.getDeclaredField("map");
+                field.setAccessible(true);
+                return (Map<String, Object>) field.get(obj);
+            } catch (NoSuchFieldException e) {
+                clazz = clazz.getSuperclass();
+            } catch (Exception e) {
+                log.debug("Reflection error accessing map field: {}", e.getMessage());
+                break;
+            }
+        }
+        return java.util.Collections.emptyMap();
     }
 }

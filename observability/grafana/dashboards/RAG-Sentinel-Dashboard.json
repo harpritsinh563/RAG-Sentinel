@@ -101,18 +101,44 @@
       ],
       "type": "timeseries"
     },
-    {
+{
       "datasource": { "type": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 6,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "title": "Ollama Internals (Breakdown)",
+      "type": "timeseries",
+      "options": { 
+        "legend": { "displayMode": "list", "placement": "bottom" } 
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisPlacement": "left",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Model Load Time"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
       "targets": [
         { "expr": "rate(llm_duration_prompt_eval_seconds_sum[1m]) / rate(llm_duration_prompt_eval_seconds_count[1m])", "legendFormat": "Context Processing", "refId": "A" },
         { "expr": "rate(llm_duration_generation_seconds_sum[1m]) / rate(llm_duration_generation_seconds_count[1m])", "legendFormat": "Token Generation", "refId": "B" },
         { "expr": "rate(llm_duration_load_seconds_sum[1m]) / rate(llm_duration_load_seconds_count[1m])", "legendFormat": "Model Load Time", "refId": "C" }
-      ],
-      "type": "timeseries"
+      ]
     },
     {
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
