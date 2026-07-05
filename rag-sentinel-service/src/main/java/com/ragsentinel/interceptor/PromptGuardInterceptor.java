@@ -9,6 +9,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.util.List;
 
 import static com.ragsentinel.constants.AICustomMetrics.GUARDRAIL_VIOLATION;
+import static com.ragsentinel.constants.GeneralConstants.TYPE;
 
 /**
  * This is a simulation class or a mock implementation of how a prompt interception
@@ -21,12 +22,16 @@ public class PromptGuardInterceptor implements HandlerInterceptor {
     // Simple blocklist for the PoC
     private final List<String> blockedKeywords = List.of(
             "ignore previous instructions",
+            "ignore all previous instructions",
+            "system override",
             "bypass",
             "system prompt"
     );
-
     public PromptGuardInterceptor(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
+        // Pre-register the counter with the exact tag combination
+        // so it initializes to 0 in Prometheus on startup instead of "No data"
+        this.meterRegistry.counter(GUARDRAIL_VIOLATION, TYPE, "prompt_injection").increment(0);
     }
 
     @Override
@@ -39,7 +44,7 @@ public class PromptGuardInterceptor implements HandlerInterceptor {
 
             if (isMalicious) {
                 // Emitting the custom observability metric!
-                meterRegistry.counter(GUARDRAIL_VIOLATION, "type", "prompt_injection").increment();
+                meterRegistry.counter(GUARDRAIL_VIOLATION, TYPE, "prompt_injection").increment();
 
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.getWriter().write("Guardrail triggered: Malicious prompt detected.");
