@@ -71,3 +71,6 @@ ollama run nomic-embed-text
 # Start the docker images for Prometheus, Graffana, OTel Collector, Jaegger, pgVector
 cd observability
 docker-compose up -d
+
+# Run a simple test to cover all the metrics (This is under scripts dir)
+k6 run soak-test.js
